@@ -1,0 +1,4 @@
+.venv
+.env
+fastapimongo.docx
+__pycache__
