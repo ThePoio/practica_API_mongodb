@@ -7,6 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from contextlib import asynccontextmanager
 from bson import ObjectId
 from dotenv import load_dotenv
+from pymongo import ReturnDocument
 import os
 
 
@@ -74,3 +75,16 @@ async def crear_estudiante(e: EstudianteIn):
     result = await estudiantes.insert_one(e.model_dump())
     nuevo = await estudiantes.find_one({"_id": result.inserted_id})
     return nuevo
+
+@app.put("/estudiantes/{id}", response_model=EstudianteOut)
+async def actualizar_estudiante(id: str, e: EstudianteIn):
+    if not ObjectId.is_valid(id):
+        raise HTTPException(status_code=400, detail="ID inválido.")
+    result = await estudiantes.find_one_and_update(
+        {"_id": ObjectId(id)},
+        {"$set": e.model_dump()},
+        return_document=ReturnDocument.AFTER
+)
+    if not result:
+        raise HTTPException(status_code=404, detail="Estudiante no encontrado.")
+    return result
