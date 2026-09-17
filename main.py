@@ -10,6 +10,10 @@ from dotenv import load_dotenv
 from pymongo import ReturnDocument
 import os
 
+import asyncio
+import time
+
+
 
 
 load_dotenv()
@@ -74,6 +78,10 @@ status_code=status.HTTP_201_CREATED)
 async def crear_estudiante(e: EstudianteIn):
     result = await estudiantes.insert_one(e.model_dump())
     nuevo = await estudiantes.find_one({"_id": result.inserted_id})
+    #Regla de negocio: No permitir estudiantes con el mismo email
+    if await estudiantes.count_documents({"email": e.email}) > 1:
+        await estudiantes.delete_one({"_id": result.inserted_id})
+        raise HTTPException(status_code=400, detail="Ya existe un estudiante con ese email.")
     return nuevo
 
 @app.put("/estudiantes/{id}", response_model=EstudianteOut)
@@ -88,3 +96,33 @@ async def actualizar_estudiante(id: str, e: EstudianteIn):
     if not result:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado.")
     return result
+
+@app.delete("/estudiantes/{id}", status_code=status.HTTP_204_NO_CONTENT)
+async def eliminar_estudiante(id: str):
+
+    if not ObjectId.is_valid(id):
+        raise HTTPException(status_code=400, detail="ID inválido.")
+    result = await estudiantes.delete_one({"_id": ObjectId(id)})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Estudiante no encontrado.")
+    return None
+
+
+def generar_reporte_pesado(nombre_estudiante: str) -> dict:
+    time.sleep(3) # Simula 3 segundos de carga intensiva
+    return {"estudiante": nombre_estudiante, "estado": "Reporte generado exitosamente", "paginas": 10 }
+
+@app.post("/estudiantes/{id}/generar-reporte")
+async def generar_reporte(id: str):
+    if not ObjectId.is_valid(id):
+        raise HTTPException(status_code=400, detail="ID inválido.")
+    # Consulta asíncrona a MongoDB (I/O Bound)
+    estudiante = await estudiantes.find_one({"_id": ObjectId(id)})
+    if not estudiante:
+        raise HTTPException(status_code=404, detail="Estudiante no encontrado.")
+    reporte = await asyncio.to_thread(generar_reporte_pesado, estudiante["nombre"])
+    return reporte
+
+@app.get("/app")
+def app_ui():
+    return FileResponse("static/index.html")
